@@ -23,3 +23,6 @@ build/
 # Executables (for cross-platform or external builds)
 *.exe
 
+# Python venv
+venv/
+
