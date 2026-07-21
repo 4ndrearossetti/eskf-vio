@@ -18,6 +18,9 @@ SRCS = main.c
 # Object files (now in build/)
 OBJS = build/$(SRCS:.c=.o)
 
+# Dataset path
+DATA = ~/datasets/euroc/MH_01_easy/mav0/imu0/data.csv
+
 # Default target
 all: build/$(TARGET)
 
@@ -38,6 +41,6 @@ clean:
 	rm -rf build
 
 # Run the program
-run: build/$(TARGET)
-	@./build/$(TARGET)
+run: build/$(TARGET) $(DATA)
+	@./build/$(TARGET) $(DATA)
 
