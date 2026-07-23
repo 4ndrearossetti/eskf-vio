@@ -32,7 +32,7 @@ void rotate_vector(vector_3d_t *v, quaternion_t q) {
         quaternion_t rotate_q;
         // v' = Q ∘ v ∘ Q^-1
         rotate_q = q_mul_q(q, v_as_q);
-        rotate_q = q_mul_q(rotate_q, q_inv(q));
+        rotate_q = q_mul_q(rotate_q, q_conj(q));
 
         v->x = rotate_q.x;
         v->y = rotate_q.y;
