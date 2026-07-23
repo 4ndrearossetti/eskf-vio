@@ -4,7 +4,8 @@ CFLAGS  = -Wall -Wextra -O2 -Isrc
 LIBS    = -lm
 
 # Dataset path
-DATA    = ~/datasets/euroc/MH_01_easy/mav0/imu0/data.csv
+DATA_IMU = ~/datasets/euroc/MH_01_easy/mav0/imu0/data.csv
+DATA_GT  = ~/datasets/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv
 
 # Sources: everything in src/, main binary from all of them
 SRCS    = $(wildcard src/*.c)
@@ -35,7 +36,7 @@ test: $(TEST_BINS)
 	@for t in $(TEST_BINS); do echo "== $$t"; $$t || exit 1; done
 
 run: build/main
-	@./build/main $(DATA)
+	@./build/main $(DATA_IMU) $(DATA_GT)
 
 clean:
 	rm -rf build

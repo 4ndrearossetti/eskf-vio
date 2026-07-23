@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <math.h>
-#include "../src/quat.h"
+#include "quat.h"
 
 static int nfail = 0;
 

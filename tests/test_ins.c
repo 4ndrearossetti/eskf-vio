@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <math.h>
-#include "../src/ins.h"
+#include "ins.h"
 
 static int close_to(double a, double b) { return fabs(a - b) < 1e-12; }
 
