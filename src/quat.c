@@ -1,3 +1,4 @@
+#include <math.h>
 #include "quat.h"
 
 quaternion_t v_to_q(vector_3d_t v) {

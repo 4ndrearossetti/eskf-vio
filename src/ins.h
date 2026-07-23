@@ -4,7 +4,7 @@
 
 // Convert one gyro reading (rad/s, body frame) over timestep dt (s)
 // into the incremental rotation quaternion for that tick.
-quaternion_t q_from_gyro(vector_3d_t w, double dt);
+quaternion_t gyro_to_q(vector_3d_t w, double dt);
 
 #endif
 
