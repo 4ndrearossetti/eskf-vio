@@ -16,6 +16,7 @@ typedef struct {
 
 quaternion_t v_to_q(vector_3d_t v);
 quaternion_t q_conj(quaternion_t q);
+quaternion_t q_norm(quaternion_t q);
 quaternion_t q_mul_q(quaternion_t a, quaternion_t b);
 void rotate_vector(vector_3d_t *v, quaternion_t q);
 

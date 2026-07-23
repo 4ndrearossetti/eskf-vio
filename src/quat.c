@@ -19,6 +19,16 @@ quaternion_t q_conj(quaternion_t q) {
         return inverse_q;
 }
 
+quaternion_t q_norm(quaternion_t q) {
+        quaternion_t normalise_q;
+        double n = sqrt(q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z);
+        normalise_q.w = q.w / n;
+        normalise_q.x = q.x / n;
+        normalise_q.y = q.y / n;
+        normalise_q.z = q.z / n;
+        return normalise_q;
+}
+
 quaternion_t q_mul_q(quaternion_t a, quaternion_t b) {
         quaternion_t product_q;
         product_q.w = a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z;
