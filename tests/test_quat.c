@@ -57,6 +57,23 @@ int main(void) {
         rotate_vector(&vx, q90x);               // rotation about own axis: no-op
         check("rot: axis vector invariant", veq(vx, 1, 0, 0));
 
+        // --- per-axis composition: catches sign errors invisible to z-only tests ---
+        quaternion_t q90y = { s, 0, s, 0 };          // 90° pitch about y
+
+        check("mul: 90x*90x = 180x",
+              qeq(q_mul_q(q90x, q90x), 0, 1, 0, 0));
+        check("mul: 90y*90y = 180y",
+              qeq(q_mul_q(q90y, q90y), 0, 0, 1, 0));
+
+        // --- rotation direction on the other axes, right-hand rule ---
+        vector_3d_t vy = { 0, 1, 0 };
+        rotate_vector(&vy, q90x);                    // roll +90° about x: y -> z
+        check("rot: 90x takes y to z", veq(vy, 0, 0, 1));
+
+        vector_3d_t vz = { 0, 0, 1 };
+        rotate_vector(&vz, q90y);                    // pitch +90° about y: z -> x
+        check("rot: 90y takes z to x", veq(vz, 1, 0, 0));
+
         printf(nfail ? "FAIL (%d)\n" : "PASS\n", nfail);
         return nfail != 0;
 }

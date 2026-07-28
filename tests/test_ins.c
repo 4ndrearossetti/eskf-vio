@@ -22,6 +22,20 @@ int main(void) {
         ok &= close_to(qi.w, 1.0) && close_to(qi.x, 0)
            && close_to(qi.y, 0)   && close_to(qi.z, 0);
 
+        // pi/2 rad/s about x for 1 s = 90° roll -> (cos45, sin45, 0, 0)
+        vector_3d_t wx = { M_PI / 2.0, 0, 0 };
+        quaternion_t qx = gyro_to_q(wx, 1.0);
+        printf("x axis:     %f %f %f %f\n", qx.w, qx.x, qx.y, qx.z);
+        ok &= close_to(qx.w, 0.7071067811865476) && close_to(qx.x, 0.7071067811865476)
+           && close_to(qx.y, 0)                  && close_to(qx.z, 0);
+
+        // pi/2 rad/s about y for 1 s = 90° pitch -> (cos45, 0, sin45, 0)
+        vector_3d_t wy = { 0, M_PI / 2.0, 0 };
+        quaternion_t qy = gyro_to_q(wy, 1.0);
+        printf("y axis:     %f %f %f %f\n", qy.w, qy.x, qy.y, qy.z);
+        ok &= close_to(qy.w, 0.7071067811865476) && close_to(qy.x, 0)
+           && close_to(qy.y, 0.7071067811865476) && close_to(qy.z, 0);
+
         printf(ok ? "PASS\n" : "FAIL\n");
         return !ok;
 }
