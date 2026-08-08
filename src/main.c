@@ -13,57 +13,63 @@ static size_t gt_nearest(const gt_sample_t *gt, size_t n, double t) {
 }
 
 int main(int argc, char *argv[]) {
-        if (argc < 3) { fprintf(stderr, "usage: %s <file>\n", argv[0]); return 1; }
+        if (argc < 3) { fprintf(stderr, "usage: %s <imu.csv> <gt.csv>\n", argv[0]); return 1; }
 
-        imu_sample_t *samples_imu;
-        size_t n = euroc_load_imu(argv[1], &samples_imu);
+        imu_sample_t *imu;
+        size_t n = euroc_load_imu(argv[1], &imu);
         if (n == 0) return 1;
 
-        gt_sample_t *samples_gt;
-        size_t m = euroc_load_gt(argv[2], &samples_gt);
+        gt_sample_t *gt;
+        size_t m = euroc_load_gt(argv[2], &gt);
         if (m == 0) return 1;
 
         size_t i0 = 0;
-        while (i0 < n && samples_imu[i0].timestamp < samples_gt[0].timestamp)
+        while (i0 < n && imu[i0].timestamp < gt[0].timestamp)
                 i0++;
 
-        quaternion_t q = samples_gt[gt_nearest(samples_gt, m, samples_imu[i0].timestamp)].q;
-        printf("q0 = %.4f %.4f %.4f %.4f\n", q.w, q.x, q.y, q.z);
+        size_t j0 = gt_nearest(gt, m, imu[i0].timestamp);
+        quaternion_t q  = gt[j0].q;
+        vector_3d_t pos = gt[j0].pos;
+        vector_3d_t vel = gt[j0].vel;
+        vector_3d_t bw  = gt[0].gyro_bias;
+        vector_3d_t ba  = gt[0].accel_bias;
 
-        vector_3d_t b = samples_gt[0].gyro_bias;
-        printf("gyro bias: %.4f %.4f %.4f  |b|=%.4f rad/s\n",
-               b.x, b.y, b.z, sqrt(b.x*b.x + b.y*b.y + b.z*b.z));
+        printf("%-8s %-12s %-10s\n", "t [s]", "pos err [m]", "att err [deg]");
 
         for (size_t k = i0; k < n-1; k++) {
-                double dt = samples_imu[k+1].timestamp - samples_imu[k].timestamp;
+                double dt = imu[k+1].timestamp - imu[k].timestamp;
 
-                vector_3d_t w = samples_imu[k].gyro;
-                w.x -= b.x;
-                w.y -= b.y;
-                w.z -= b.z;
+                vector_3d_t w = imu[k].gyro;
+                w.x -= bw.x;  w.y -= bw.y;  w.z -= bw.z;
+                q = q_norm(q_mul_q(q, gyro_to_q(w, dt)));
 
-                quaternion_t dq = gyro_to_q(w, dt);
-                q = q_norm(q_mul_q(q, dq));
+                vector_3d_t a = imu[k].accel;
+                a.x -= ba.x;  a.y -= ba.y;  a.z -= ba.z;
+                rotate_vector(&a, q);
+                a.z -= 9.81;
+
+                vel.x += a.x*dt;  vel.y += a.y*dt;  vel.z += a.z*dt;
+                pos.x += vel.x*dt;  pos.y += vel.y*dt;  pos.z += vel.z*dt;
 
                 if ((k - i0) % 4000 == 0) {
-                        quaternion_t qk = samples_gt[gt_nearest(samples_gt, m, samples_imu[k].timestamp)].q;
-                        double dk = q.w*qk.w + q.x*qk.x + q.y*qk.y + q.z*qk.z;
-                        printf("t=%6.1f  err=%6.2f deg\n",
-                               samples_imu[k].timestamp - samples_imu[i0].timestamp,
-                               2.0 * acos(fabs(dk)) * 180.0 / M_PI);
+                        gt_sample_t *g = &gt[gt_nearest(gt, m, imu[k].timestamp)];
+                        double dx = pos.x - g->pos.x, dy = pos.y - g->pos.y, dz = pos.z - g->pos.z;
+                        double dot = q.w*g->q.w + q.x*g->q.x + q.y*g->q.y + q.z*g->q.z;
+                        printf("%-8.1f %-12.2f %-10.2f\n",
+                               imu[k].timestamp - imu[i0].timestamp,
+                               sqrt(dx*dx + dy*dy + dz*dz),
+                               2.0 * acos(fabs(dot)) * 180.0 / M_PI);
                 }
         }
-        printf("q = %.4f %.4f %.4f %.4f\n", q.w, q.x, q.y, q.z);
 
-        quaternion_t qt = samples_gt[gt_nearest(samples_gt, m, samples_imu[n-1].timestamp)].q;
-        double dot = q.w*qt.w + q.x*qt.x + q.y*qt.y + q.z*qt.z;
-        double err = 2.0 * acos(fabs(dot)) * 180.0 / M_PI;
-        printf("gt    = %.4f %.4f %.4f %.4f\n", qt.w, qt.x, qt.y, qt.z);
-        printf("error = %.2f deg\n", err);
+        gt_sample_t *g = &gt[gt_nearest(gt, m, imu[n-1].timestamp)];
+        double dx = pos.x - g->pos.x, dy = pos.y - g->pos.y, dz = pos.z - g->pos.z;
+        printf("final pos error: %.1f m after %.1f s\n",
+               sqrt(dx*dx + dy*dy + dz*dz),
+               imu[n-1].timestamp - imu[i0].timestamp);
 
-        free(samples_imu);
-        free(samples_gt);
-
+        free(imu);
+        free(gt);
         return 0;
 }
 
