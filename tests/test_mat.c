@@ -18,12 +18,10 @@ static int meq(mat_t A, mat_t B) {
 }
 
 int main(void) {
-        /* A = [1 2 3; 4 5 6]  (2x3),  B = [7 8; 9 10; 11 12]  (3x2) */
         mat_t A = mat_zero(2,3), B = mat_zero(3,2);
         double av[] = {1,2,3,4,5,6}, bv[] = {7,8,9,10,11,12};
         for (int k = 0; k < 6; k++) { A.d[k] = av[k]; B.d[k] = bv[k]; }
 
-        /* hand-computed: AB = [58 64; 139 154] */
         mat_t AB = mat_mul(A, B);
         mat_t AB_expect = mat_zero(2,2);
         double ev[] = {58,64,139,154};

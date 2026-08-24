@@ -4,6 +4,7 @@
 #include "euroc.h"
 #include "ins.h"
 #include "quat.h"
+#include "eskf.h"
 
 static size_t gt_nearest(const gt_sample_t *gt, size_t n, double t) {
         for (size_t i=0; i<n; i++)
@@ -34,7 +35,10 @@ int main(int argc, char *argv[]) {
         vector_3d_t bw  = gt[0].gyro_bias;
         vector_3d_t ba  = gt[0].accel_bias;
 
-        printf("%-8s %-12s %-10s\n", "t [s]", "pos err [m]", "att err [deg]");
+        eskf_t f;
+        eskf_init(&f);
+
+        printf("%-8s %-12s %-12s %-10s\n", "t [s]", "pos err [m]", "pred +- [m]", "att err [deg]");
 
         for (size_t k = i0; k < n-1; k++) {
                 double dt = imu[k+1].timestamp - imu[k].timestamp;
@@ -45,6 +49,9 @@ int main(int argc, char *argv[]) {
 
                 vector_3d_t a = imu[k].accel;
                 a.x -= ba.x;  a.y -= ba.y;  a.z -= ba.z;
+
+                eskf_predict(&f, q, a, w, dt);
+
                 rotate_vector(&a, q);
                 a.z -= 9.81;
 
@@ -55,18 +62,20 @@ int main(int argc, char *argv[]) {
                         gt_sample_t *g = &gt[gt_nearest(gt, m, imu[k].timestamp)];
                         double dx = pos.x - g->pos.x, dy = pos.y - g->pos.y, dz = pos.z - g->pos.z;
                         double dot = q.w*g->q.w + q.x*g->q.x + q.y*g->q.y + q.z*g->q.z;
-                        printf("%-8.1f %-12.2f %-10.2f\n",
+                        printf("%-8.1f %-12.2f %-12.2f %-10.2f\n",
                                imu[k].timestamp - imu[i0].timestamp,
                                sqrt(dx*dx + dy*dy + dz*dz),
+                               sqrt(mat_get(f.P, 0, 0)),
                                2.0 * acos(fabs(dot)) * 180.0 / M_PI);
                 }
         }
 
         gt_sample_t *g = &gt[gt_nearest(gt, m, imu[n-1].timestamp)];
         double dx = pos.x - g->pos.x, dy = pos.y - g->pos.y, dz = pos.z - g->pos.z;
-        printf("final pos error: %.1f m after %.1f s\n",
+        printf("final: measured %.1f m, predicted +-%.1f m\n",
                sqrt(dx*dx + dy*dy + dz*dz),
-               imu[n-1].timestamp - imu[i0].timestamp);
+               sqrt(mat_get(f.P, 0, 0)));
+        printf("att 1-sigma: %.3f deg\n", sqrt(mat_get(f.P, 6, 6)) * 180.0 / M_PI);
 
         free(imu);
         free(gt);
