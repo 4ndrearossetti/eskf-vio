@@ -120,3 +120,35 @@ void eskf_predict(eskf_t *f, imu_sample_t s, double dt) {
         f->pos.x += f->vel.x*dt;  f->pos.y += f->vel.y*dt;  f->pos.z += f->vel.z*dt;
 }
 
+void eskf_update_pos(eskf_t *f, vector_3d_t z, double sigma_z) {
+        mat_t y = mat_zero(3, 1);
+        y.d[0] = z.x - f->pos.x;
+        y.d[1] = z.y - f->pos.y;
+        y.d[2] = z.z - f->pos.z;
+
+        mat_t PHt = mat_zero(15, 3);
+        mat_t S   = mat_zero(3, 3);
+        for (size_t i = 0; i < 15; i++)
+                for (size_t j = 0; j < 3; j++)
+                        mat_set(&PHt, i, j, mat_get(f->P, i, j));
+        for (size_t i = 0; i < 3; i++)
+                for (size_t j = 0; j < 3; j++)
+                        mat_set(&S, i, j, mat_get(f->P, i, j) + (i == j ? sigma_z*sigma_z : 0.0));
+
+        mat_t K  = mat_mul(PHt, mat3_inv(S));
+        mat_t dx = mat_mul(K, y);
+
+        mat_t KH = mat_zero(15, 15);
+        for (size_t i = 0; i < 15; i++)
+                for (size_t j = 0; j < 3; j++)
+                        mat_set(&KH, i, j, mat_get(K, i, j));
+        f->P = mat_mul(mat_add(mat_eye(15), mat_scale(KH, -1.0)), f->P);
+
+        f->pos.x += dx.d[POS+0];  f->pos.y += dx.d[POS+1];  f->pos.z += dx.d[POS+2];
+        f->vel.x += dx.d[VEL+0];  f->vel.y += dx.d[VEL+1];  f->vel.z += dx.d[VEL+2];
+        vector_3d_t dth = { dx.d[TH+0], dx.d[TH+1], dx.d[TH+2] };
+        f->q = q_norm(q_mul_q(f->q, gyro_to_q(dth, 1.0)));
+        f->ba.x += dx.d[BA+0];  f->ba.y += dx.d[BA+1];  f->ba.z += dx.d[BA+2];
+        f->bg.x += dx.d[BG+0];  f->bg.y += dx.d[BG+1];  f->bg.z += dx.d[BG+2];
+}
+

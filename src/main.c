@@ -13,6 +13,12 @@ static size_t gt_nearest(const gt_sample_t *gt, size_t n, double t) {
         return n-1;
 }
 
+static double gauss(void) {
+        double u1 = (rand() + 1.0) / (RAND_MAX + 2.0);
+        double u2 =  rand()        / (RAND_MAX + 1.0);
+        return sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
+}
+
 int main(int argc, char *argv[]) {
         if (argc < 3) { fprintf(stderr, "usage: %s <imu.csv> <gt.csv>\n", argv[0]); return 1; }
 
@@ -35,9 +41,19 @@ int main(int argc, char *argv[]) {
 
         printf("%-8s %-12s %-12s %-10s\n", "t [s]", "pos err [m]", "pred +- [m]", "att err [deg]");
 
+        srand(42);
         for (size_t k = i0; k < n-1; k++) {
                 double dt = imu[k+1].timestamp - imu[k].timestamp;
                 eskf_predict(&f, imu[k], dt);
+
+                const double sigma_z = 0.05;
+                if ((k - i0) % 10 == 0) {                     /* 20 Hz fake position fix */
+                        gt_sample_t *g = &gt[gt_nearest(gt, m, imu[k].timestamp)];
+                        vector_3d_t z = { g->pos.x + sigma_z*gauss(),
+                                          g->pos.y + sigma_z*gauss(),
+                                          g->pos.z + sigma_z*gauss() };
+                        eskf_update_pos(&f, z, sigma_z);
+                }
 
                 if ((k - i0) % 4000 == 0) {
                         gt_sample_t *g = &gt[gt_nearest(gt, m, imu[k].timestamp)];
@@ -57,6 +73,9 @@ int main(int argc, char *argv[]) {
                sqrt(dx*dx + dy*dy + dz*dz),
                sqrt(mat_get(f.P, 0, 0)));
         printf("att 1-sigma: %.3f deg\n", sqrt(mat_get(f.P, 6, 6)) * 180.0 / M_PI);
+        gt_sample_t *ge = &gt[m-1];
+        printf("gyro bias est %.5f %.5f %.5f | true %.5f %.5f %.5f\n",
+               f.bg.x, f.bg.y, f.bg.z, ge->gyro_bias.x, ge->gyro_bias.y, ge->gyro_bias.z);
 
         free(imu);
         free(gt);
