@@ -83,12 +83,13 @@ int main(void) {
         check("Q: pos block empty",         mat_get(Q,0,0) == 0.0);
 
         eskf_t f;
-        eskf_init(&f);
+        vector_3d_t zero = {0,0,0};
+        eskf_init(&f, id, zero, zero, zero, zero);
         double p0v = mat_get(f.P, 3, 3);
         double p0p = mat_get(f.P, 0, 0);
-        vector_3d_t hover_a = {0,0,9.81};
+        imu_sample_t hover = { .timestamp = 0, .gyro = {0,0,0}, .accel = {0,0,9.81} };
         for (int k = 0; k < 200; k++)
-                eskf_predict(&f, id, hover_a, w0, 0.005);
+                eskf_predict(&f, hover, 0.005);
         int sym = 1;
         for (int i = 0; i < 15; i++)
                 for (int j = 0; j < 15; j++)

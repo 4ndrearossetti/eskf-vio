@@ -85,16 +85,38 @@ mat_t build_Q(double dt) {
         return Q;
 }
 
-void eskf_init(eskf_t *filter) {
-        filter->P = mat_zero(15, 15);
-        for (size_t i = BA; i < BA+3; i++)  mat_set(&filter->P, i, i, 1e-6);
-        for (size_t i = BG; i < 15;   i++)  mat_set(&filter->P, i, i, 1e-8);
+void eskf_init(eskf_t *f, quaternion_t q, vector_3d_t pos, vector_3d_t vel,
+               vector_3d_t ba, vector_3d_t bg) {
+        f->q = q;
+        f->pos = pos;
+        f->vel = vel;
+        f->ba = ba;
+        f->bg = bg;
+        f->P = mat_zero(15, 15);
+        for (size_t i = POS; i < TH+3; i++)  mat_set(&f->P, i, i, 1e-5);
+        for (size_t i = BA;  i < BA+3; i++)  mat_set(&f->P, i, i, 1e-6);
+        for (size_t i = BG;  i < 15;   i++)  mat_set(&f->P, i, i, 1e-8);
 }
 
-void eskf_predict(eskf_t *filter, quaternion_t q, vector_3d_t a, vector_3d_t w, double dt) {
-        mat_t F = build_F(q, a, w, dt);
+void eskf_predict(eskf_t *f, imu_sample_t s, double dt) {
+        vector_3d_t w = s.gyro;
+        vector_3d_t a = s.accel;
+        w.x -= f->bg.x;
+        w.y -= f->bg.y;
+        w.z -= f->bg.z;
+        a.x -= f->ba.x;
+        a.y -= f->ba.y;
+        a.z -= f->ba.z;
+
+        f->q = q_norm(q_mul_q(f->q, gyro_to_q(w, dt)));
+
+        mat_t F  = build_F(f->q, a, w, dt);
         mat_t Ft = mat_transpose(F);
-        mat_t Q = build_Q(dt);
-        filter->P = mat_add(mat_mul(mat_mul(F, filter->P), Ft), Q);
+        f->P = mat_add(mat_mul(mat_mul(F, f->P), Ft), build_Q(dt));
+
+        rotate_vector(&a, f->q);
+        a.z -= 9.81;
+        f->vel.x += a.x*dt;  f->vel.y += a.y*dt;  f->vel.z += a.z*dt;
+        f->pos.x += f->vel.x*dt;  f->pos.y += f->vel.y*dt;  f->pos.z += f->vel.z*dt;
 }
 

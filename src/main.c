@@ -29,39 +29,20 @@ int main(int argc, char *argv[]) {
                 i0++;
 
         size_t j0 = gt_nearest(gt, m, imu[i0].timestamp);
-        quaternion_t q  = gt[j0].q;
-        vector_3d_t pos = gt[j0].pos;
-        vector_3d_t vel = gt[j0].vel;
-        vector_3d_t bw  = gt[0].gyro_bias;
-        vector_3d_t ba  = gt[0].accel_bias;
 
         eskf_t f;
-        eskf_init(&f);
+        eskf_init(&f, gt[j0].q, gt[j0].pos, gt[j0].vel, gt[0].accel_bias, gt[0].gyro_bias);
 
         printf("%-8s %-12s %-12s %-10s\n", "t [s]", "pos err [m]", "pred +- [m]", "att err [deg]");
 
         for (size_t k = i0; k < n-1; k++) {
                 double dt = imu[k+1].timestamp - imu[k].timestamp;
-
-                vector_3d_t w = imu[k].gyro;
-                w.x -= bw.x;  w.y -= bw.y;  w.z -= bw.z;
-                q = q_norm(q_mul_q(q, gyro_to_q(w, dt)));
-
-                vector_3d_t a = imu[k].accel;
-                a.x -= ba.x;  a.y -= ba.y;  a.z -= ba.z;
-
-                eskf_predict(&f, q, a, w, dt);
-
-                rotate_vector(&a, q);
-                a.z -= 9.81;
-
-                vel.x += a.x*dt;  vel.y += a.y*dt;  vel.z += a.z*dt;
-                pos.x += vel.x*dt;  pos.y += vel.y*dt;  pos.z += vel.z*dt;
+                eskf_predict(&f, imu[k], dt);
 
                 if ((k - i0) % 4000 == 0) {
                         gt_sample_t *g = &gt[gt_nearest(gt, m, imu[k].timestamp)];
-                        double dx = pos.x - g->pos.x, dy = pos.y - g->pos.y, dz = pos.z - g->pos.z;
-                        double dot = q.w*g->q.w + q.x*g->q.x + q.y*g->q.y + q.z*g->q.z;
+                        double dx = f.pos.x - g->pos.x, dy = f.pos.y - g->pos.y, dz = f.pos.z - g->pos.z;
+                        double dot = f.q.w*g->q.w + f.q.x*g->q.x + f.q.y*g->q.y + f.q.z*g->q.z;
                         printf("%-8.1f %-12.2f %-12.2f %-10.2f\n",
                                imu[k].timestamp - imu[i0].timestamp,
                                sqrt(dx*dx + dy*dy + dz*dz),
@@ -71,7 +52,7 @@ int main(int argc, char *argv[]) {
         }
 
         gt_sample_t *g = &gt[gt_nearest(gt, m, imu[n-1].timestamp)];
-        double dx = pos.x - g->pos.x, dy = pos.y - g->pos.y, dz = pos.z - g->pos.z;
+        double dx = f.pos.x - g->pos.x, dy = f.pos.y - g->pos.y, dz = f.pos.z - g->pos.z;
         printf("final: measured %.1f m, predicted +-%.1f m\n",
                sqrt(dx*dx + dy*dy + dz*dz),
                sqrt(mat_get(f.P, 0, 0)));

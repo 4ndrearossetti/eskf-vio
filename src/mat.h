@@ -17,6 +17,7 @@ mat_t mat_transpose(mat_t A);
 mat_t mat_scale(mat_t A, double s);
 double mat_get(mat_t A, size_t i, size_t j);
 void mat_set(mat_t *A, size_t i, size_t j, double v);
+mat_t mat3_inv(mat_t A);
 
 #endif
 

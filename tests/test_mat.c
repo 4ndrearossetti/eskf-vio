@@ -38,6 +38,11 @@ int main(void) {
         check("scale: 2 then 0.5 = A",   meq(mat_scale(mat_scale(A, 2.0), 0.5), A));
         check("get/set roundtrip",       (mat_set(&A, 1, 2, 42.0), mat_get(A, 1, 2) == 42.0));
 
+        mat_t A3 = mat_zero(3,3);
+        double a3[] = {4,7,2, 3,6,1, 2,5,3};
+        for (int k = 0; k < 9; k++) A3.d[k] = a3[k];
+        check("inv3: A * inv(A) = I", meq(mat_mul(A3, mat3_inv(A3)), mat_eye(3)));
+
         printf(nfail ? "FAIL (%d)\n" : "PASS\n", nfail);
         return nfail != 0;
 }
