@@ -18,5 +18,10 @@ typedef struct {
         vector_3d_t accel_bias; // m/s^2
 } gt_sample_t;
 
+typedef struct {
+        double timestamp;       // s
+        char   filename[64];
+} cam_frame_t;
+
 #endif
 

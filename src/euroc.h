@@ -4,6 +4,7 @@
 
 size_t euroc_load_imu(const char *path, imu_sample_t **out);
 size_t euroc_load_gt(const char *path, gt_sample_t **out);
+size_t euroc_load_cam(const char *csv_path, cam_frame_t **out);
 
 #endif
 

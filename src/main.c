@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <math.h>
 #include "euroc.h"
-#include "ins.h"
 #include "quat.h"
 #include "eskf.h"
 
@@ -20,7 +19,7 @@ static double gauss(void) {
 }
 
 int main(int argc, char *argv[]) {
-        if (argc < 3) { fprintf(stderr, "usage: %s <imu.csv> <gt.csv>\n", argv[0]); return 1; }
+        if (argc < 4) { fprintf(stderr, "usage: %s <imu.csv> <gt.csv>\n", argv[0]); return 1; }
 
         imu_sample_t *imu;
         size_t n = euroc_load_imu(argv[1], &imu);
@@ -29,6 +28,15 @@ int main(int argc, char *argv[]) {
         gt_sample_t *gt;
         size_t m = euroc_load_gt(argv[2], &gt);
         if (m == 0) return 1;
+
+        cam_frame_t *cam;
+        size_t nc = euroc_load_cam(argv[3], &cam);
+        if (nc == 0) return 1;
+        printf("%zu frames, %.1f s, %.0f Hz, first: %s\n", nc,
+               cam[nc-1].timestamp - cam[0].timestamp,
+               (double)nc / (cam[nc-1].timestamp - cam[0].timestamp),
+               cam[0].filename);
+        free(cam);
 
         size_t i0 = 0;
         while (i0 < n && imu[i0].timestamp < gt[0].timestamp)
