@@ -28,11 +28,17 @@ int main(void) {
 
         corner_t *c = malloc(sizeof(corner_t) * 100000);
         int n = fast_detect(&img, 30, c, 100000);
-        printf("  fast on frame 0, t=30: %d corners\n", n);
+        printf("  fast t=30: %d raw corners\n", n);
         check("fast: finds corners on real frame", n > 100);
 
+        corner_t sel[512];
+        int ns = fast_select(c, n, img.w, img.h, 5, 8, 6, 5, sel, 512);
+        printf("  fast_select: %d -> %d corners\n", n, ns);
+        check("fast: selection thins to a few hundred", ns > 100 && ns <= 240);
+
         FILE *fc = fopen("/tmp/corners.txt", "w");
-        for (int i = 0; i < n; i++) fprintf(fc, "%d %d\n", c[i].x, c[i].y);
+        for (int i = 0; i < ns; i++)
+                fprintf(fc, "%d %d\n", sel[i].x, sel[i].y);
         fclose(fc);
         free(c);
 
