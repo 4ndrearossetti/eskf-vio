@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
                 eskf_predict(&f, imu[k], dt);
 
                 const double sigma_z = 0.05;
-                if ((k - i0) % 10 == 0) {                     /* 20 Hz fake position fix */
+                if ((k - i0) % 10 == 0) {
                         gt_sample_t *g = &gt[gt_nearest(gt, m, imu[k].timestamp)];
                         vector_3d_t z = { g->pos.x + sigma_z*gauss(),
                                           g->pos.y + sigma_z*gauss(),

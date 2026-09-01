@@ -3,12 +3,12 @@
 #include "mat.h"
 
 mat_t mat_zero(size_t r, size_t c) {
-        mat_t M = {r, c};
+        mat_t M = { .rows = r, .cols = c};
         return M;
 }
 
 mat_t mat_eye(size_t n) {
-        mat_t M = {n, n};
+        mat_t M = { .rows = n, .cols = n};
 
         for (size_t i = 0; i < n; i++) {
                 M.d[i*n + i] = 1;
@@ -19,7 +19,7 @@ mat_t mat_eye(size_t n) {
 mat_t mat_add(mat_t A, mat_t B) {
         assert(A.rows == B.rows && A.cols == B.cols);
 
-        mat_t M = {A.rows, A.cols};
+        mat_t M = { .rows = A.rows, A.cols};
 
         for (size_t i = 0; i < M.rows; i++) {
                 for (size_t j = 0; j < M.cols; j++) {
@@ -32,7 +32,7 @@ mat_t mat_add(mat_t A, mat_t B) {
 mat_t mat_mul(mat_t A, mat_t B) {
         assert(A.cols == B.rows);
 
-        mat_t M = {A.rows, B.cols};
+        mat_t M = { .rows = A.rows, .cols = B.cols};
 
         for (size_t i = 0; i < M.rows; i++) {
                 for (size_t j = 0; j < M.cols; j++) {
@@ -45,7 +45,7 @@ mat_t mat_mul(mat_t A, mat_t B) {
 }
 
 mat_t mat_transpose(mat_t A) {
-        mat_t M = {A.cols, A.rows};
+        mat_t M = { .rows = A.cols, .cols = A.rows};
 
         for (size_t i = 0; i < M.rows; i++) {
                 for (size_t j = 0; j < M.cols; j++) {
@@ -56,7 +56,7 @@ mat_t mat_transpose(mat_t A) {
 }
 
 mat_t mat_scale(mat_t A, double s) {
-        mat_t M = {A.rows, A.cols};
+        mat_t M = { .rows = A.rows, .cols = A.cols};
 
         for (size_t i = 0; i < M.rows; i++) {
                 for (size_t j = 0; j < M.cols; j++) {

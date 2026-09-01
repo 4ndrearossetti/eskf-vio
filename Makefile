@@ -1,6 +1,6 @@
 # Makefile
 CC      = gcc
-CFLAGS  = -Wall -Wextra -O2 -Isrc
+CFLAGS  = -Wall -Wextra -O2 -Isrc -Ithird_party
 LIBS    = -lm
 
 # Dataset path
