@@ -10,6 +10,7 @@ typedef struct {
 int  image_load(const char *path, image_t *out);
 void image_free(image_t *img);
 int  image_save_pgm(const char *path, const image_t *img);
+int image_copy(image_t *dst, const image_t *src);
 
 #endif
 

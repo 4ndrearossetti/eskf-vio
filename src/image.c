@@ -23,3 +23,11 @@ int image_save_pgm(const char *path, const image_t *img) {
         return 0;
 }
 
+int image_copy(image_t *dst, const image_t *src) {
+        dst->w = src->w;  dst->h = src->h;
+        dst->data = malloc((size_t)src->w * src->h);
+        if (!dst->data) return -1;
+        memcpy(dst->data, src->data, (size_t)src->w * src->h);
+        return 0;
+}
+
