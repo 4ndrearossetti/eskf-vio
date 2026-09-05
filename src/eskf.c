@@ -117,6 +117,24 @@ void eskf_predict(eskf_t *f, imu_sample_t s, double dt) {
         f->pos.x += f->vel.x*dt;  f->pos.y += f->vel.y*dt;  f->pos.z += f->vel.z*dt;
 }
 
+void eskf_inject(eskf_t *f, const mat_t *dx) {
+        f->pos.x += dx->d[POS+0];  f->pos.y += dx->d[POS+1];  f->pos.z += dx->d[POS+2];
+        f->vel.x += dx->d[VEL+0];  f->vel.y += dx->d[VEL+1];  f->vel.z += dx->d[VEL+2];
+        vector_3d_t dth = { dx->d[TH+0], dx->d[TH+1], dx->d[TH+2] };
+        f->q = q_norm(q_mul_q(f->q, gyro_to_q(dth, 1.0)));
+        f->ba.x += dx->d[BA+0];  f->ba.y += dx->d[BA+1];  f->ba.z += dx->d[BA+2];
+        f->bg.x += dx->d[BG+0];  f->bg.y += dx->d[BG+1];  f->bg.z += dx->d[BG+2];
+
+        for (int c = 0; c < f->n_clones; c++) {
+                size_t d = 15 + 6 * (size_t)c;
+                f->clones[c].pos.x += dx->d[d+0];
+                f->clones[c].pos.y += dx->d[d+1];
+                f->clones[c].pos.z += dx->d[d+2];
+                vector_3d_t cth = { dx->d[d+3], dx->d[d+4], dx->d[d+5] };
+                f->clones[c].q = q_norm(q_mul_q(f->clones[c].q, gyro_to_q(cth, 1.0)));
+        }
+}
+
 void eskf_update_pos(eskf_t *f, vector_3d_t z, double sigma_z) {
         size_t n = 15 + 6 * (size_t)f->n_clones;
 
@@ -143,21 +161,7 @@ void eskf_update_pos(eskf_t *f, vector_3d_t z, double sigma_z) {
                         mat_set(&KH, i, j, mat_get(K, i, j));
         f->P = mat_mul(mat_add(mat_eye(n), mat_scale(KH, -1.0)), f->P);
 
-        f->pos.x += dx.d[POS+0];  f->pos.y += dx.d[POS+1];  f->pos.z += dx.d[POS+2];
-        f->vel.x += dx.d[VEL+0];  f->vel.y += dx.d[VEL+1];  f->vel.z += dx.d[VEL+2];
-        vector_3d_t dth = { dx.d[TH+0], dx.d[TH+1], dx.d[TH+2] };
-        f->q = q_norm(q_mul_q(f->q, gyro_to_q(dth, 1.0)));
-        f->ba.x += dx.d[BA+0];  f->ba.y += dx.d[BA+1];  f->ba.z += dx.d[BA+2];
-        f->bg.x += dx.d[BG+0];  f->bg.y += dx.d[BG+1];  f->bg.z += dx.d[BG+2];
-
-        for (int c = 0; c < f->n_clones; c++) {
-                size_t d = 15 + 6 * (size_t)c;
-                f->clones[c].pos.x += dx.d[d+0];
-                f->clones[c].pos.y += dx.d[d+1];
-                f->clones[c].pos.z += dx.d[d+2];
-                vector_3d_t cth = { dx.d[d+3], dx.d[d+4], dx.d[d+5] };
-                f->clones[c].q = q_norm(q_mul_q(f->clones[c].q, gyro_to_q(cth, 1.0)));
-        }
+        eskf_inject(f, &dx);
 }
 
 static void marginalize_oldest(eskf_t *f) {

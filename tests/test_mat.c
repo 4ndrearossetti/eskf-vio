@@ -43,6 +43,31 @@ int main(void) {
         for (int k = 0; k < 9; k++) A3.d[k] = a3[k];
         check("inv3: A * inv(A) = I", meq(mat_mul(A3, mat3_inv(A3)), mat_eye(3)));
 
+        mat_t Ms = mat_zero(5, 5);
+        for (size_t i = 0; i < 5; i++)
+                for (size_t j = 0; j < 5; j++)
+                        mat_set(&Ms, i, j, (double)((i*7 + j*3 + 1) % 11) / 11.0);
+        mat_t Ss = mat_add(mat_mul(Ms, mat_transpose(Ms)), mat_scale(mat_eye(5), 2.0));
+        mat_t Bs = mat_zero(5, 2);
+        for (size_t i = 0; i < 10; i++) Bs.d[i] = (double)(i % 7) - 3.0;
+        mat_t Xs;
+        int chok = mat_chol_solve(Ss, Bs, &Xs);
+        mat_t Rr = mat_mul(Ss, Xs);
+        int chres = 1;
+        for (size_t i = 0; i < 5; i++)
+                for (size_t j = 0; j < 2; j++)
+                        chres &= fabs(mat_get(Rr, i, j) - mat_get(Bs, i, j)) < 1e-10;
+        check("chol: solves 5x5 SPD", chok && chres);
+
+        mat_t I3;
+        mat_chol_solve(Ss, mat_eye(5), &I3);
+        mat_t SI = mat_mul(Ss, I3);
+        int chinv = 1;
+        for (size_t i = 0; i < 5; i++)
+                for (size_t j = 0; j < 5; j++)
+                        chinv &= fabs(mat_get(SI, i, j) - (i==j ? 1.0 : 0.0)) < 1e-10;
+        check("chol: inverse via identity RHS", chinv);
+
         printf(nfail ? "FAIL (%d)\n" : "PASS\n", nfail);
         return nfail != 0;
 }

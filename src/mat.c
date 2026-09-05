@@ -92,3 +92,44 @@ mat_t mat3_inv(mat_t A) {
         return M;
 }
 
+int mat_chol_solve(mat_t S, mat_t B, mat_t *X) {
+        assert(S.rows == S.cols && S.rows == B.rows);
+        size_t n = S.rows, m = B.cols;
+
+        mat_t L = mat_zero(n, n);
+        for (size_t i = 0; i < n; i++)
+                for (size_t j = 0; j <= i; j++) {
+                        double s = mat_get(S, i, j);
+                        for (size_t k = 0; k < j; k++)
+                                s -= mat_get(L, i, k) * mat_get(L, j, k);
+                        if (i == j) {
+                                if (s <= 0) return 0;
+                                mat_set(&L, i, i, sqrt(s));
+                        } else {
+                                mat_set(&L, i, j, s / mat_get(L, j, j));
+                        }
+                }
+
+        mat_t Y = mat_zero(n, m);
+        for (size_t c = 0; c < m; c++)
+                for (size_t i = 0; i < n; i++) {
+                        double s = mat_get(B, i, c);
+                        for (size_t k = 0; k < i; k++)
+                                s -= mat_get(L, i, k) * mat_get(Y, k, c);
+                        mat_set(&Y, i, c, s / mat_get(L, i, i));
+                }
+
+        mat_t Xo = mat_zero(n, m);
+        for (size_t c = 0; c < m; c++)
+                for (size_t ii = n; ii > 0; ii--) {
+                        size_t i = ii - 1;
+                        double s = mat_get(Y, i, c);
+                        for (size_t k = i + 1; k < n; k++)
+                                s -= mat_get(L, k, i) * mat_get(Xo, k, c);
+                        mat_set(&Xo, i, c, s / mat_get(L, i, i));
+                }
+
+        *X = Xo;
+        return 1;
+}
+
