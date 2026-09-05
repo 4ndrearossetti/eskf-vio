@@ -7,7 +7,14 @@ typedef struct {
         double k1, k2, p1, p2;  // radial-tangential distortion
 } cam_t;
 
+typedef struct {
+        double R[9];            // R_BS row-major: camera axes in body frame
+        vector_3d_t t;          // t_BS: camera origin in body frame
+} extrinsic_t;
+
 extern const cam_t EUROC_CAM0;
+
+extern const extrinsic_t EUROC_T_BS;
 
 int cam_project(const cam_t *c, vector_3d_t p, double *u, double *v);
 vector_3d_t cam_unproject(const cam_t *c, double u, double v);
