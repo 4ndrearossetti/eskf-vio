@@ -3,6 +3,11 @@
 
 enum { POS = 0, VEL = 3, TH = 6, BA = 9, BG = 12 };
 
+#define SIG_A   2.0000e-3
+#define SIG_G   1.6968e-4
+#define SIG_BA  3.0000e-3
+#define SIG_BG  1.9393e-5
+
 mat_t mat_skew(vector_3d_t a) {
         mat_t M = mat_zero(3, 3);
         mat_set(&M, 0, 1, -a.z);
@@ -32,41 +37,30 @@ mat_t build_F(quaternion_t q, vector_3d_t a, vector_3d_t w, double dt) {
         mat_t F = mat_eye(15);
         mat_t R = quat_to_R(q);
 
-        // dp += dv * dt  (cell 0,1)
         mat_set(&F, POS+0, VEL+0, dt);
         mat_set(&F, POS+1, VEL+1, dt);
         mat_set(&F, POS+2, VEL+2, dt);
 
-        // dv += -R * [a]_x * dt  (cell 1,2)
         mat_t RA = mat_mul(R, mat_skew(a));
         for (size_t i = 0; i < 3; i++)
                 for (size_t j = 0; j < 3; j++)
                         mat_set(&F, VEL+i, TH+j, -dt * mat_get(RA, i, j));
 
-        // dv += -R * da_b * dt  (cell 1,3)
         for (size_t i = 0; i < 3; i++)
                 for (size_t j = 0; j < 3; j++)
                         mat_set(&F, VEL+i, BA+j, -dt * mat_get(R, i, j));
 
-        // dw += R^T * dw * dt (cell 2, 2)
         mat_t Rw = mat_transpose(quat_to_R(gyro_to_q(w, dt)));
         for (size_t i = 0; i < 3; i++)
                 for (size_t j = 0; j < 3; j++)
                         mat_set(&F, TH+i, TH+j, mat_get(Rw, i, j));
 
-        // dw += -dw_b * dt  (cell 2,4)
         mat_set(&F, TH+0, BG+0, -dt);
         mat_set(&F, TH+1, BG+1, -dt);
         mat_set(&F, TH+2, BG+2, -dt);
 
         return F;
 }
-
-// IMU noise params — EuRoC imu0/sensor.yaml (ADIS16448)
-#define SIG_A   2.0000e-3    // accel noise density   [m/s²/√Hz]
-#define SIG_G   1.6968e-4    // gyro  noise density   [rad/s/√Hz]
-#define SIG_BA  3.0000e-3    // accel bias random walk [m/s³/√Hz]
-#define SIG_BG  1.9393e-5    // gyro  bias random walk [rad/s²/√Hz]
 
 mat_t build_Q(double dt) {
         mat_t Q = mat_zero(15, 15);
@@ -87,11 +81,8 @@ mat_t build_Q(double dt) {
 
 void eskf_init(eskf_t *f, quaternion_t q, vector_3d_t pos, vector_3d_t vel,
                vector_3d_t ba, vector_3d_t bg) {
-        f->q = q;
-        f->pos = pos;
-        f->vel = vel;
-        f->ba = ba;
-        f->bg = bg;
+        f->q = q;  f->pos = pos;  f->vel = vel;  f->ba = ba;  f->bg = bg;
+        f->n_clones = 0;
         f->P = mat_zero(15, 15);
         for (size_t i = POS; i < TH+3; i++)  mat_set(&f->P, i, i, 1e-5);
         for (size_t i = BA;  i < BA+3; i++)  mat_set(&f->P, i, i, 1e-6);
@@ -100,19 +91,25 @@ void eskf_init(eskf_t *f, quaternion_t q, vector_3d_t pos, vector_3d_t vel,
 
 void eskf_predict(eskf_t *f, imu_sample_t s, double dt) {
         vector_3d_t w = s.gyro;
+        w.x -= f->bg.x;  w.y -= f->bg.y;  w.z -= f->bg.z;
         vector_3d_t a = s.accel;
-        w.x -= f->bg.x;
-        w.y -= f->bg.y;
-        w.z -= f->bg.z;
-        a.x -= f->ba.x;
-        a.y -= f->ba.y;
-        a.z -= f->ba.z;
+        a.x -= f->ba.x;  a.y -= f->ba.y;  a.z -= f->ba.z;
 
         f->q = q_norm(q_mul_q(f->q, gyro_to_q(w, dt)));
 
-        mat_t F  = build_F(f->q, a, w, dt);
+        size_t n = 15 + 6 * (size_t)f->n_clones;
+        mat_t F15 = build_F(f->q, a, w, dt);
+        mat_t Q15 = build_Q(dt);
+        mat_t F = mat_eye(n);
+        mat_t Q = mat_zero(n, n);
+        for (size_t i = 0; i < 15; i++)
+                for (size_t j = 0; j < 15; j++) {
+                        mat_set(&F, i, j, mat_get(F15, i, j));
+                        mat_set(&Q, i, j, mat_get(Q15, i, j));
+                }
+
         mat_t Ft = mat_transpose(F);
-        f->P = mat_add(mat_mul(mat_mul(F, f->P), Ft), build_Q(dt));
+        f->P = mat_add(mat_mul(mat_mul(F, f->P), Ft), Q);
 
         rotate_vector(&a, f->q);
         a.z -= 9.81;
@@ -121,14 +118,16 @@ void eskf_predict(eskf_t *f, imu_sample_t s, double dt) {
 }
 
 void eskf_update_pos(eskf_t *f, vector_3d_t z, double sigma_z) {
+        size_t n = 15 + 6 * (size_t)f->n_clones;
+
         mat_t y = mat_zero(3, 1);
         y.d[0] = z.x - f->pos.x;
         y.d[1] = z.y - f->pos.y;
         y.d[2] = z.z - f->pos.z;
 
-        mat_t PHt = mat_zero(15, 3);
+        mat_t PHt = mat_zero(n, 3);
         mat_t S   = mat_zero(3, 3);
-        for (size_t i = 0; i < 15; i++)
+        for (size_t i = 0; i < n; i++)
                 for (size_t j = 0; j < 3; j++)
                         mat_set(&PHt, i, j, mat_get(f->P, i, j));
         for (size_t i = 0; i < 3; i++)
@@ -138,11 +137,11 @@ void eskf_update_pos(eskf_t *f, vector_3d_t z, double sigma_z) {
         mat_t K  = mat_mul(PHt, mat3_inv(S));
         mat_t dx = mat_mul(K, y);
 
-        mat_t KH = mat_zero(15, 15);
-        for (size_t i = 0; i < 15; i++)
+        mat_t KH = mat_zero(n, n);
+        for (size_t i = 0; i < n; i++)
                 for (size_t j = 0; j < 3; j++)
                         mat_set(&KH, i, j, mat_get(K, i, j));
-        f->P = mat_mul(mat_add(mat_eye(15), mat_scale(KH, -1.0)), f->P);
+        f->P = mat_mul(mat_add(mat_eye(n), mat_scale(KH, -1.0)), f->P);
 
         f->pos.x += dx.d[POS+0];  f->pos.y += dx.d[POS+1];  f->pos.z += dx.d[POS+2];
         f->vel.x += dx.d[VEL+0];  f->vel.y += dx.d[VEL+1];  f->vel.z += dx.d[VEL+2];
@@ -150,5 +149,60 @@ void eskf_update_pos(eskf_t *f, vector_3d_t z, double sigma_z) {
         f->q = q_norm(q_mul_q(f->q, gyro_to_q(dth, 1.0)));
         f->ba.x += dx.d[BA+0];  f->ba.y += dx.d[BA+1];  f->ba.z += dx.d[BA+2];
         f->bg.x += dx.d[BG+0];  f->bg.y += dx.d[BG+1];  f->bg.z += dx.d[BG+2];
+
+        for (int c = 0; c < f->n_clones; c++) {
+                size_t d = 15 + 6 * (size_t)c;
+                f->clones[c].pos.x += dx.d[d+0];
+                f->clones[c].pos.y += dx.d[d+1];
+                f->clones[c].pos.z += dx.d[d+2];
+                vector_3d_t cth = { dx.d[d+3], dx.d[d+4], dx.d[d+5] };
+                f->clones[c].q = q_norm(q_mul_q(f->clones[c].q, gyro_to_q(cth, 1.0)));
+        }
+}
+
+static void marginalize_oldest(eskf_t *f) {
+        size_t n = 15 + 6 * (size_t)f->n_clones;
+        mat_t Pn = mat_zero(n - 6, n - 6);
+        size_t ii = 0;
+        for (size_t i = 0; i < n; i++) {
+                if (i >= 15 && i < 21) continue;
+                size_t jj = 0;
+                for (size_t j = 0; j < n; j++) {
+                        if (j >= 15 && j < 21) continue;
+                        mat_set(&Pn, ii, jj, mat_get(f->P, i, j));
+                        jj++;
+                }
+                ii++;
+        }
+        f->P = Pn;
+
+        for (int c = 0; c + 1 < f->n_clones; c++)
+                f->clones[c] = f->clones[c + 1];
+        f->n_clones--;
+}
+
+void eskf_augment(eskf_t *f, double timestamp) {
+        if (f->n_clones == MAX_CLONES)
+                marginalize_oldest(f);
+
+        size_t d = 15 + 6 * (size_t)f->n_clones;
+        size_t src[6] = { POS, POS+1, POS+2, TH, TH+1, TH+2 };
+
+        mat_t Pn = mat_zero(d + 6, d + 6);
+        for (size_t i = 0; i < d; i++)
+                for (size_t j = 0; j < d; j++)
+                        mat_set(&Pn, i, j, mat_get(f->P, i, j));
+        for (size_t i = 0; i < 6; i++)
+                for (size_t k = 0; k < d; k++) {
+                        mat_set(&Pn, d+i, k, mat_get(f->P, src[i], k));
+                        mat_set(&Pn, k, d+i, mat_get(f->P, k, src[i]));
+                }
+        for (size_t i = 0; i < 6; i++)
+                for (size_t j = 0; j < 6; j++)
+                        mat_set(&Pn, d+i, d+j, mat_get(f->P, src[i], src[j]));
+        f->P = Pn;
+
+        f->clones[f->n_clones] = (clone_t){ f->q, f->pos, timestamp };
+        f->n_clones++;
 }
 

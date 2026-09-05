@@ -1,6 +1,9 @@
 # Makefile
 CC      = gcc
-CFLAGS  = -Wall -Wextra -O2 -Isrc -Ithird_party
+CFLAGS = -Wall -Wextra -O2 -Isrc -Ithird_party
+ifdef DEBUG
+CFLAGS = -Wall -Wextra -g -O0 -Isrc -Ithird_party
+endif
 LIBS    = -lm
 
 # Dataset path

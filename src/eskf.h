@@ -4,10 +4,20 @@
 #include "mat.h"
 #include "quat.h"
 
+#define MAX_CLONES 10
+
+typedef struct {
+        quaternion_t q;
+        vector_3d_t  pos;
+        double       timestamp;
+} clone_t;
+
 typedef struct {
         quaternion_t q;
         vector_3d_t pos, vel;
         vector_3d_t ba, bg;
+        clone_t clones[MAX_CLONES];
+        int n_clones;
         mat_t P;
 } eskf_t;
 
@@ -15,6 +25,7 @@ void eskf_init(eskf_t *f, quaternion_t q, vector_3d_t pos, vector_3d_t vel,
                vector_3d_t ba, vector_3d_t bg);
 void eskf_predict(eskf_t *f, imu_sample_t s, double dt);
 void eskf_update_pos(eskf_t *f, vector_3d_t z, double sigma_z);
+void eskf_augment(eskf_t *f, double timestamp);
 
 #endif
 

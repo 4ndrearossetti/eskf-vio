@@ -2,7 +2,7 @@
 #define MAT_H
 #include <stddef.h>
 
-#define MAT_MAX 15
+#define MAT_MAX 80
 
 typedef struct {
         size_t rows, cols;

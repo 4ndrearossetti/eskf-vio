@@ -98,6 +98,47 @@ int main(void) {
         check("P: vel variance grows",    mat_get(f.P, 3, 3) > p0v);
         check("P: pos variance grows",    mat_get(f.P, 0, 0) > p0p);
 
+        eskf_t g;
+        eskf_init(&g, id, zero, zero, zero, zero);
+        for (int k = 0; k < 100; k++) eskf_predict(&g, hover, 0.005);
+        eskf_augment(&g, 0.5);
+        check("aug: P is 21x21", g.P.rows == 21 && g.P.cols == 21);
+
+        int csym = 1, corner = 1, xrow = 1;
+        size_t src[6] = { 0, 1, 2, 6, 7, 8 };
+        for (size_t i = 0; i < 21; i++)
+                for (size_t j = 0; j < 21; j++)
+                        csym &= fabs(mat_get(g.P,i,j) - mat_get(g.P,j,i)) < 1e-12;
+        for (size_t i = 0; i < 6; i++)
+                for (size_t j = 0; j < 6; j++)
+                        corner &= mat_get(g.P, 15+i, 15+j) == mat_get(g.P, src[i], src[j]);
+        for (size_t i = 0; i < 6; i++)
+                for (size_t k = 0; k < 15; k++)
+                        xrow &= mat_get(g.P, 15+i, k) == mat_get(g.P, src[i], k);
+        check("aug: symmetric", csym);
+        check("aug: clone corner copied", corner);
+        check("aug: cross rows copied", xrow);
+
+        double clone_var = mat_get(g.P, 15, 15);
+        double cross_iv  = mat_get(g.P, 15, 3);
+        for (int k = 0; k < 400; k++) eskf_predict(&g, hover, 0.005);
+        int psym = 1;
+        for (size_t i = 0; i < 21; i++)
+                for (size_t j = 0; j < 21; j++)
+                        psym &= fabs(mat_get(g.P,i,j) - mat_get(g.P,j,i)) < 1e-9;
+        check("aug: symmetric after predict", psym);
+        check("aug: clone block frozen", mat_get(g.P, 15, 15) == clone_var);
+        check("aug: IMU-clone cross evolves", mat_get(g.P, 15, 3) != cross_iv);
+
+        for (int c = 0; c < 12; c++) eskf_augment(&g, 1.0 + c);
+        check("marg: capped at 10 clones", g.n_clones == 10 && g.P.rows == 75);
+        check("marg: oldest gone", g.clones[0].timestamp > 1.5);
+        int msym = 1;
+        for (size_t i = 0; i < 75; i++)
+                for (size_t j = 0; j < 75; j++)
+                        msym &= fabs(mat_get(g.P,i,j) - mat_get(g.P,j,i)) < 1e-9;
+        check("marg: symmetric at full window", msym);
+
         printf(nfail ? "FAIL (%d)\n" : "PASS\n", nfail);
         return nfail != 0;
 }
