@@ -1,5 +1,6 @@
 #include "frontend.h"
 #include "fast.h"
+#include "cam.h"
 
 #define TARGET     200
 #define FAST_T     30
@@ -12,6 +13,7 @@ void frontend_init(frontend_t *fe) {
         fe->has_prev = 0;
         fe->n = 0;
         fe->next_id = 0;
+        fe->n_dead = 0;
 }
 
 void frontend_free(frontend_t *fe) {
@@ -38,15 +40,27 @@ static void replenish(frontend_t *fe, const image_t *frame) {
         int ns = fast_select(raw, nk, frame->w, frame->h, 5, 8, 6, 5, sel, FE_MAX);
 
         for (int i = 0; i < ns && fe->n < TARGET; i++) {
-                fe->f[fe->n++] = (feature_t){
-                        .id = fe->next_id++,
-                        .pt = { sel[i].x, sel[i].y },
-                        .age = 0,
-                };
+                vector_3d_t ray = cam_unproject(&EUROC_CAM0, sel[i].x, sel[i].y);
+                feature_t *nf = &fe->f[fe->n++];
+                nf->id = fe->next_id++;
+                nf->pt = (pt2_t){ sel[i].x, sel[i].y };
+                nf->age = 0;
+                nf->hist[0] = (pt2_t){ ray.x, ray.y };
+                nf->nhist = 1;
         }
 }
 
+static void harvest(frontend_t *fe, const feature_t *ft) {
+        if (ft->nhist < 3) return;
+        dead_track_t *dtk = &fe->dead[fe->n_dead++];
+        for (int h = 0; h < ft->nhist; h++)
+                dtk->obs[h] = ft->hist[h];
+        dtk->nobs = ft->nhist;
+}
+
 void frontend_process(frontend_t *fe, const image_t *frame) {
+        fe->n_dead = 0;
+
         if (fe->has_prev && fe->n > 0) {
                 pt2_t p0[FE_MAX], p1[FE_MAX], pb[FE_MAX];
                 unsigned char st[FE_MAX], stb[FE_MAX];
@@ -64,7 +78,16 @@ void frontend_process(frontend_t *fe, const image_t *frame) {
                                 fe->f[m] = fe->f[i];
                                 fe->f[m].pt = p1[i];
                                 fe->f[m].age++;
+
+                                if (fe->f[m].nhist == FE_HIST) {
+                                        harvest(fe, &fe->f[m]);
+                                        fe->f[m].nhist = 0;
+                                }
+                                vector_3d_t ray = cam_unproject(&EUROC_CAM0, p1[i].x, p1[i].y);
+                                fe->f[m].hist[fe->f[m].nhist++] = (pt2_t){ ray.x, ray.y };
                                 m++;
+                        } else {
+                                harvest(fe, &fe->f[i]);
                         }
                 }
                 fe->n = m;

@@ -9,7 +9,7 @@ LIBS    = -lm
 # Dataset path
 DATA_IMU = ~/datasets/euroc/MH_01_easy/mav0/imu0/data.csv
 DATA_GT  = ~/datasets/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv
-DATA_CAM = ~/datasets/euroc/MH_01_easy/mav0/cam0/data.csv
+DATA_CAM = ~/datasets/euroc/MH_01_easy/mav0/cam0
 
 SRCS    = $(wildcard src/*.c)
 OBJS    = $(patsubst src/%.c,build/%.o,$(SRCS))

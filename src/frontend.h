@@ -4,12 +4,20 @@
 #include "klt.h"
 
 #define FE_MAX 256
+#define FE_HIST 12
 
 typedef struct {
         int id;
         pt2_t pt;
         int age;
+        pt2_t hist[FE_HIST];
+        int nhist;
 } feature_t;
+
+typedef struct {
+        pt2_t obs[FE_HIST];
+        int nobs;
+} dead_track_t;
 
 typedef struct {
         image_t prev;
@@ -17,6 +25,8 @@ typedef struct {
         feature_t f[FE_MAX];
         int n;
         int next_id;
+        dead_track_t dead[FE_MAX];
+        int n_dead;
 } frontend_t;
 
 void frontend_init(frontend_t *fe);

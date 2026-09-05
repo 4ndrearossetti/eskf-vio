@@ -4,22 +4,22 @@
 #include "euroc.h"
 #include "quat.h"
 #include "eskf.h"
+#include "image.h"
+#include "frontend.h"
+#include "msckf.h"
 
 static size_t gt_nearest(const gt_sample_t *gt, size_t n, double t) {
-        for (size_t i=0; i<n; i++)
+        for (size_t i = 0; i < n; i++)
                 if (gt[i].timestamp >= t)
                         return i;
-        return n-1;
-}
-
-static double gauss(void) {
-        double u1 = (rand() + 1.0) / (RAND_MAX + 2.0);
-        double u2 =  rand()        / (RAND_MAX + 1.0);
-        return sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
+        return n - 1;
 }
 
 int main(int argc, char *argv[]) {
-        if (argc < 4) { fprintf(stderr, "usage: %s <imu.csv> <gt.csv>\n", argv[0]); return 1; }
+        if (argc < 4) {
+                fprintf(stderr, "usage: %s <imu.csv> <gt.csv> <cam0 dir>\n", argv[0]);
+                return 1;
+        }
 
         imu_sample_t *imu;
         size_t n = euroc_load_imu(argv[1], &imu);
@@ -29,14 +29,12 @@ int main(int argc, char *argv[]) {
         size_t m = euroc_load_gt(argv[2], &gt);
         if (m == 0) return 1;
 
+        const char *cam_dir = argv[3];
+        char path[512];
+        snprintf(path, sizeof path, "%s/data.csv", cam_dir);
         cam_frame_t *cam;
-        size_t nc = euroc_load_cam(argv[3], &cam);
-        if (nc == 0) return 1;
-        printf("%zu frames, %.1f s, %.0f Hz, first: %s\n", nc,
-               cam[nc-1].timestamp - cam[0].timestamp,
-               (double)nc / (cam[nc-1].timestamp - cam[0].timestamp),
-               cam[0].filename);
-        free(cam);
+        size_t ncam = euroc_load_cam(path, &cam);
+        if (ncam == 0) return 1;
 
         size_t i0 = 0;
         while (i0 < n && imu[i0].timestamp < gt[0].timestamp)
@@ -47,20 +45,42 @@ int main(int argc, char *argv[]) {
         eskf_t f;
         eskf_init(&f, gt[j0].q, gt[j0].pos, gt[j0].vel, gt[0].accel_bias, gt[0].gyro_bias);
 
+        frontend_t fe;
+        frontend_init(&fe);
+        size_t ic = 0;
+        while (ic < ncam && cam[ic].timestamp < imu[i0].timestamp)
+                ic++;
+
+        int updates_ok = 0, updates_rej = 0;
+
         printf("%-8s %-12s %-12s %-10s\n", "t [s]", "pos err [m]", "pred +- [m]", "att err [deg]");
 
-        srand(42);
         for (size_t k = i0; k < n-1; k++) {
                 double dt = imu[k+1].timestamp - imu[k].timestamp;
                 eskf_predict(&f, imu[k], dt);
 
-                const double sigma_z = 0.05;
-                if ((k - i0) % 10 == 0) {
-                        gt_sample_t *g = &gt[gt_nearest(gt, m, imu[k].timestamp)];
-                        vector_3d_t z = { g->pos.x + sigma_z*gauss(),
-                                          g->pos.y + sigma_z*gauss(),
-                                          g->pos.z + sigma_z*gauss() };
-                        eskf_update_pos(&f, z, sigma_z);
+                if (ic < ncam && cam[ic].timestamp <= imu[k+1].timestamp) {
+                        snprintf(path, sizeof path, "%s/data/%s", cam_dir, cam[ic].filename);
+                        image_t img;
+                        if (image_load(path, &img) == 0) {
+                                eskf_augment(&f, cam[ic].timestamp);
+                                frontend_process(&fe, &img);
+
+                                for (int d = 0; d < fe.n_dead; d++) {
+                                        dead_track_t *tk = &fe.dead[d];
+                                        int kk = tk->nobs;
+                                        if (kk > f.n_clones) continue;
+                                        int ci[FE_HIST];
+                                        for (int j = 0; j < kk; j++)
+                                                ci[j] = f.n_clones - kk + j;
+                                        if (msckf_update_track(&f, ci, tk->obs, kk, 3.0/458.0))
+                                                updates_ok++;
+                                        else
+                                                updates_rej++;
+                                }
+                                image_free(&img);
+                        }
+                        ic++;
                 }
 
                 if ((k - i0) % 4000 == 0) {
@@ -81,12 +101,15 @@ int main(int argc, char *argv[]) {
                sqrt(dx*dx + dy*dy + dz*dz),
                sqrt(mat_get(f.P, 0, 0)));
         printf("att 1-sigma: %.3f deg\n", sqrt(mat_get(f.P, 6, 6)) * 180.0 / M_PI);
-        gt_sample_t *ge = &gt[m-1];
+        printf("updates: %d ok, %d rejected\n", updates_ok, updates_rej);
         printf("gyro bias est %.5f %.5f %.5f | true %.5f %.5f %.5f\n",
-               f.bg.x, f.bg.y, f.bg.z, ge->gyro_bias.x, ge->gyro_bias.y, ge->gyro_bias.z);
+               f.bg.x, f.bg.y, f.bg.z,
+               gt[m-1].gyro_bias.x, gt[m-1].gyro_bias.y, gt[m-1].gyro_bias.z);
 
+        frontend_free(&fe);
         free(imu);
         free(gt);
+        free(cam);
         return 0;
 }
 
